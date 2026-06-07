@@ -864,28 +864,35 @@ function App(){
   const[authed,setAuthed]=useState(false);
   const[authChecking,setAuthChecking]=useState(true);
 
-  // Check/restore session on load
+  // Explicit data loader — called after any successful auth
+  const loadData=async()=>{
+    setSyncing(true);setSyncErr('');
+    try{
+      const[nr,cr]=await Promise.all([
+        SB.getAll('wvortex_nichos'),
+        SB.getAll('wvortex_clientes')
+      ]);
+      setNichos(nr.map(r=>r.data));
+      setClients(cr.map(r=>r.data));
+    }catch(e){
+      setSyncErr('Erro ao carregar dados: '+e.message);
+      console.error('loadData error:',e);
+    }
+    setSyncing(false);setLoaded(true);
+  };
+
+  // On mount: try to restore session, then load data if ok
   useEffect(()=>{
     (async()=>{
+      setAuthChecking(true);
       const ok=await restoreSession();
-      setAuthed(ok);
+      if(ok){
+        setAuthed(true);
+        await loadData();
+      }
       setAuthChecking(false);
     })();
   },[]);
-
-  // Load data when authenticated
-  useEffect(()=>{
-    if(!authed)return;
-    (async()=>{
-      setSyncing(true);setSyncErr('');
-      try{
-        const[nr,cr]=await Promise.all([SB.getAll('wvortex_nichos'),SB.getAll('wvortex_clientes')]);
-        setNichos(nr.map(r=>r.data));
-        setClients(cr.map(r=>r.data));
-      }catch(e){setSyncErr('Erro ao carregar: '+e.message);}
-      setSyncing(false);setLoaded(true);
-    })();
-  },[authed]);
 
   useEffect(()=>{
     document.body.style.background=C.bg;
@@ -924,7 +931,7 @@ function App(){
   const logout=()=>{
     if(!confirm('Sair da sessão?'))return;
     clearSession();
-    setAuthed(false);setLoaded(false);setNichos([]);setClients([]);
+    setAuthed(false);setLoaded(false);setNichos([]);setClients([]);setSyncErr('');
   };
 
   const goHome=()=>{setEditN(null);setEditC(null);setTab('nichos');};
@@ -945,7 +952,7 @@ function App(){
   if(!authed) return(
     <TC.Provider value={{C,theme,setTab}}>
       <style>{`::-webkit-scrollbar-thumb{background:${C.sc}}`}</style>
-      <LoginScreen onLogin={()=>setAuthed(true)}/>
+      <LoginScreen onLogin={async()=>{ setAuthed(true); await loadData(); }}/>
     </TC.Provider>
   );
   const filteredClients=clients.filter(c=>!filterN||c.set_id===filterN);
