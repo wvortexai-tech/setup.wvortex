@@ -868,14 +868,16 @@ function App(){
   const loadData=async()=>{
     setSyncing(true);setSyncErr('');
     try{
+      console.log('loadData: JWT=',SB._jwt?'SET':'MISSING');
       const[nr,cr]=await Promise.all([
         SB.getAll('wvortex_nichos'),
         SB.getAll('wvortex_clientes')
       ]);
+      console.log('loadData: nichos=',nr.length,'clientes=',cr.length);
       setNichos(nr.map(r=>r.data));
       setClients(cr.map(r=>r.data));
     }catch(e){
-      setSyncErr('Erro ao carregar dados: '+e.message);
+      setSyncErr('Erro ao carregar: '+e.message);
       console.error('loadData error:',e);
     }
     setSyncing(false);setLoaded(true);
@@ -885,10 +887,14 @@ function App(){
   useEffect(()=>{
     (async()=>{
       setAuthChecking(true);
-      const ok=await restoreSession();
-      if(ok){
-        setAuthed(true);
-        await loadData();
+      try{
+        const ok=await restoreSession();
+        if(ok){
+          setAuthed(true);
+          await loadData();
+        }
+      }catch(e){
+        console.error('Session restore error:',e);
       }
       setAuthChecking(false);
     })();
@@ -994,7 +1000,7 @@ function App(){
             {/* Sync status + right controls */}
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               {syncing&&<span style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:4}}>⏳ Salvando...</span>}
-              {syncErr&&<span title={syncErr} style={{fontSize:11,color:C.danger,cursor:'help'}}>⚠️ Erro</span>}
+              {syncErr&&<span title={syncErr} onClick={loadData} style={{fontSize:11,color:C.danger,cursor:'pointer',textDecoration:'underline'}} title={syncErr}>⚠️ Erro — clicar para tentar novamente</span>}
               {!syncing&&!syncErr&&loaded&&<span style={{fontSize:11,color:C.success}}>✓ Salvo</span>}
               <button onClick={logout} title="Sair"
                 style={{background:'transparent',border:'1px solid '+C.border2,borderRadius:7,padding:'5px 9px',cursor:'pointer',fontSize:11,color:C.muted,fontFamily:'Inter,sans-serif',fontWeight:600}}>
