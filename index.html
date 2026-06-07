@@ -809,7 +809,7 @@ function LoginScreen({onLogin}){
   const doLogin=async()=>{
     if(!email.trim()||!pass.trim()){setErr('Preencha e-mail e senha.');return;}
     setLoading(true);setErr('');
-    try{ const d=await SB.login(email.trim(),pass); saveSession(d); onLogin(); }
+    try{ const d=await SB.login(email.trim(),pass); saveSession(d); onLogin(d.access_token); }
     catch(e){ setErr('Credenciais inválidas. Verifique e-mail e senha.'); }
     setLoading(false);
   };
@@ -860,42 +860,59 @@ function App(){
   const[loaded,setLoaded]=useState(false);
   const[syncing,setSyncing]=useState(false);
   const[syncErr,setSyncErr]=useState('');
-  // Auth
-  const[authed,setAuthed]=useState(false);
+  // Auth — JWT no estado React garante que useEffect detecta a mudança
+  const[jwt,setJwt]=useState('');
   const[authChecking,setAuthChecking]=useState(true);
+  const authed=!!jwt;
 
-  // Explicit data loader — called after any successful auth
-  const loadData=async()=>{
+  // Quando JWT muda para string não-vazia, carrega os dados
+  useEffect(()=>{
+    if(!jwt)return;
+    (async()=>{
+      setSyncing(true);setSyncErr('');
+      try{
+        console.log('loadData: disparado, jwt=',jwt.slice(0,20)+'...');
+        const[nr,cr]=await Promise.all([
+          SB.getAll('wvortex_nichos'),
+          SB.getAll('wvortex_clientes')
+        ]);
+        console.log('loadData: nichos=',nr.length,'clientes=',cr.length,nr);
+        setNichos(nr.map(r=>r.data));
+        setClients(cr.map(r=>r.data));
+      }catch(e){
+        setSyncErr('Erro ao carregar: '+e.message);
+        console.error('loadData error:',e);
+      }
+      setSyncing(false);setLoaded(true);
+    })();
+  },[jwt]);
+
+  // Função para recarregar manualmente
+  const reloadData=async()=>{
+    if(!jwt)return;
     setSyncing(true);setSyncErr('');
     try{
-      console.log('loadData: JWT=',SB._jwt?'SET':'MISSING');
       const[nr,cr]=await Promise.all([
         SB.getAll('wvortex_nichos'),
         SB.getAll('wvortex_clientes')
       ]);
-      console.log('loadData: nichos=',nr.length,'clientes=',cr.length);
       setNichos(nr.map(r=>r.data));
       setClients(cr.map(r=>r.data));
-    }catch(e){
-      setSyncErr('Erro ao carregar: '+e.message);
-      console.error('loadData error:',e);
-    }
+    }catch(e){ setSyncErr('Erro: '+e.message); }
     setSyncing(false);setLoaded(true);
   };
 
-  // On mount: try to restore session, then load data if ok
+  // Na montagem: tenta restaurar sessão
   useEffect(()=>{
     (async()=>{
       setAuthChecking(true);
       try{
-        const ok=await restoreSession();
+        const ok=await restoreSession(); // sets SB._jwt if found
         if(ok){
-          setAuthed(true);
-          await loadData();
+          console.log('Sessão restaurada, jwt=',SB._jwt.slice(0,20)+'...');
+          setJwt(SB._jwt); // dispara useEffect acima → loadData
         }
-      }catch(e){
-        console.error('Session restore error:',e);
-      }
+      }catch(e){ console.error('restoreSession error:',e); }
       setAuthChecking(false);
     })();
   },[]);
@@ -937,7 +954,7 @@ function App(){
   const logout=()=>{
     if(!confirm('Sair da sessão?'))return;
     clearSession();
-    setAuthed(false);setLoaded(false);setNichos([]);setClients([]);setSyncErr('');
+    setJwt('');setLoaded(false);setNichos([]);setClients([]);setSyncErr('');
   };
 
   const goHome=()=>{setEditN(null);setEditC(null);setTab('nichos');};
@@ -954,11 +971,14 @@ function App(){
     </TC.Provider>
   );
 
-  // Not authenticated — show login
+  // Não autenticado — tela de login
   if(!authed) return(
     <TC.Provider value={{C,theme,setTab}}>
       <style>{`::-webkit-scrollbar-thumb{background:${C.sc}}`}</style>
-      <LoginScreen onLogin={async()=>{ setAuthed(true); await loadData(); }}/>
+      <LoginScreen onLogin={(token)=>{
+        console.log('onLogin chamado, token=',token.slice(0,20)+'...');
+        setJwt(token); // dispara useEffect([jwt]) → loadData
+      }}/>
     </TC.Provider>
   );
   const filteredClients=clients.filter(c=>!filterN||c.set_id===filterN);
@@ -1000,8 +1020,8 @@ function App(){
             {/* Sync status + right controls */}
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               {syncing&&<span style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:4}}>⏳ Salvando...</span>}
-              {syncErr&&<span title={syncErr} onClick={loadData} style={{fontSize:11,color:C.danger,cursor:'pointer',textDecoration:'underline'}} title={syncErr}>⚠️ Erro — clicar para tentar novamente</span>}
-              {!syncing&&!syncErr&&loaded&&<span style={{fontSize:11,color:C.success}}>✓ Salvo</span>}
+              {syncErr&&<span onClick={reloadData} title={syncErr} style={{fontSize:11,color:C.danger,cursor:'pointer',textDecoration:'underline'}}>⚠️ Erro — clicar para recarregar</span>}
+              {!syncing&&!syncErr&&loaded&&<span onClick={reloadData} title="Recarregar dados" style={{fontSize:11,color:C.success,cursor:'pointer'}}>✓ Salvo ↺</span>}
               <button onClick={logout} title="Sair"
                 style={{background:'transparent',border:'1px solid '+C.border2,borderRadius:7,padding:'5px 9px',cursor:'pointer',fontSize:11,color:C.muted,fontFamily:'Inter,sans-serif',fontWeight:600}}>
                 Sair
