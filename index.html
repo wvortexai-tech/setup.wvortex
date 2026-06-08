@@ -201,7 +201,11 @@ const EMPTY_CLIENT=(set_id='')=>({
 
 // ── Template logic ───────────────────────────────────────────────────────────
 function replBlock(code,name,val){
-  const si=code.indexOf('const '+name);if(si<0)return code;
+  // Word-boundary search: avoid matching 'PROCEDIMENTOS_MAP' in 'PROCEDIMENTOS_MAP_DEFAULT'
+  let si = code.indexOf('const '+name+' ');
+  if(si<0) si = code.indexOf('const '+name+'=');
+  if(si<0) si = code.indexOf('const '+name+'\n');
+  if(si<0) return code;
   const bi=code.indexOf('{',si);if(bi<0)return code;
   let d=0,e=bi;
   while(e<code.length){if(code[e]==='{')d++;else if(code[e]==='}'&&--d===0)break;e++;}
@@ -255,7 +259,7 @@ function applyAgend(t,c){
     if(n&&n.parameters&&n.parameters.jsCode){
       let code=n.parameters.jsCode;
       code=replBlock(code,'PROFISSIONAIS_DEFAULT',JSON.stringify(c.profissionais||{}));
-      code=replBlock(code,'PROCEDIMENTOS_MAP',JSON.stringify(c.procedimentos_map||{}));
+      code=replBlock(code,'PROCEDIMENTOS_MAP_DEFAULT',JSON.stringify(c.procedimentos_map||{}));
       n.parameters.jsCode=code;
     }
     return JSON.stringify(j,null,2);
