@@ -699,53 +699,7 @@ function NichoForm({nicho,onChange,onSave,onCancel}){
           ))}
         </div>
       )}
-
-                placeholder="30" type="number"
-                hint="Valor cobrado como sinal. Será descontado no total na consulta."/>
-              <Inp label="Access Token — Mercado Pago" value={client.mp_access_token||''}
-                onChange={v=>upd('mp_access_token',v)}
-                placeholder="APP_USR-... (produção) ou TEST-... (sandbox)" mono
-                hint="Painel MP → Seu negócio → Credenciais → Access Token de produção."/>
-              <Inp label='ID do Workflow "Webhook Pagamento MP"' value={client.pagamento_mp_workflow_id||''}
-                onChange={v=>upd('pagamento_mp_workflow_id',v)}
-                placeholder="Ex: 15" mono
-                hint="Importar WebhookPagamentoMP_v1_0_TEMPLATE.json no n8n e copiar o ID aqui."/>
-
-              <div style={{background:'#1a1a2e',border:'1px solid #333',borderRadius:8,padding:16,marginTop:16}}>
-                <p style={{color:'#C9B97A',fontWeight:600,marginBottom:12,fontSize:13}}>📋 Avisos gerados automaticamente nas mensagens:</p>
-                <div style={{marginBottom:10}}>
-                  <p style={{color:'#888',fontSize:12,marginBottom:4}}>Cancelamento com antecedência (&gt;24h):</p>
-                  <p style={{color:'#ccc',fontSize:12,background:'#111',padding:'8px 10px',borderRadius:4,fontFamily:'monospace',margin:0}}>
-                    {`ℹ️ *Sobre o sinal:* como o cancelamento foi feito com antecedência, o valor de R$ ${client.valor_sinal||30} pode ser devolvido. Para solicitar, entre em contato: ${client.telefone_suporte||'suporte'}.`}
-                  </p>
-                </div>
-                <div style={{marginBottom:10}}>
-                  <p style={{color:'#888',fontSize:12,marginBottom:4}}>Cancelamento com menos de 24h:</p>
-                  <p style={{color:'#ccc',fontSize:12,background:'#111',padding:'8px 10px',borderRadius:4,fontFamily:'monospace',margin:0}}>
-                    {`⚠️ *Atenção:* cancelamentos e reagendamentos com menos de 24h de antecedência não têm direito à devolução do sinal de R$ ${client.valor_sinal||30}.`}
-                  </p>
-                </div>
-                <div>
-                  <p style={{color:'#888',fontSize:12,marginBottom:4}}>Adicionado ao final do lembrete de 24h:</p>
-                  <p style={{color:'#ccc',fontSize:12,background:'#111',padding:'8px 10px',borderRadius:4,fontFamily:'monospace',margin:0}}>
-                    {`⏰ *Importante:* se precisar cancelar ou reagendar, faça agora por aqui. Cancelamentos feitos com menos de 24h de antecedência não têm direito à devolução do sinal de R$ ${client.valor_sinal||30}.`}
-                  </p>
-                </div>
-              </div>
-
-              <div style={{background:'#1c2a1c',border:'1px solid #2a4a2a',borderRadius:8,padding:16,marginTop:14}}>
-                <p style={{color:'#6baf6b',fontWeight:600,marginBottom:10,fontSize:13}}>⚙️ Configuração no Mercado Pago (após deploy):</p>
-                <ol style={{color:'#aaa',fontSize:12,margin:0,paddingLeft:20,lineHeight:2}}>
-                  <li>Painel MP → <strong style={{color:'#fff'}}>Seu negócio → Configurações → Notificações</strong></li>
-                  <li>URL do webhook: <code style={{color:'#C9B97A',background:'#111',padding:'2px 6px',borderRadius:3}}>https://n8n.wvortex.com/webhook/pagamento-mp</code></li>
-                  <li>Marque o tipo: <strong style={{color:'#fff'}}>payment</strong> → Salvar</li>
-                </ol>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-            <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20,paddingTop:14,borderTop:'1px solid '+C.border}}>
+      <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20,paddingTop:14,borderTop:'1px solid '+C.border}}>
         <Btn variant="ghost" onClick={onCancel}>Cancelar</Btn>
         <Btn onClick={onSave} disabled={!nicho.nome}>💾 Salvar Nicho</Btn>
       </div>
