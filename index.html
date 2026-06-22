@@ -169,19 +169,60 @@ const PL={manha:'Manhã',tarde:'Tarde',noite:'Noite'};
 const WCOL=['#7c5af0','#2563eb','#059669','#dc2626','#d97706','#db2777','#0891b2','#7c3aed'];
 const WICO=['🧠','📅','🔔','⭐','📊','💬','🤖','📱','🎯','📋','📞','🔧','🏷️','⚡','🚀'];
 const NICO=['📦','🏥','🏠','🏢','🚗','⚖️','💊','🎓','🛒','💼','🎨','🍕'];
-const DEF_PROC={
-  avaliacao:['avaliação','avaliacao','consulta inicial'],
-  limpeza:['limpeza','tartaro','tártaro'],
-  profilaxia:['profilaxia'],
-  restauracao:['restauração','restauracao','obturação','caries'],
-  clareamento:['clareamento','branqueamento'],
-  extracao:['extração','extracao'],
-  siso:['siso','terceiro molar'],
-  canal:['canal','endodontia'],
-  implante:['implante','pino'],
-  ortodontia:['ortodontia','aparelho'],
-  radiografia:['radiografia','raio-x','rx']
+const DEF_PROC={};
+// Sinônimos comuns por nicho — usados na auto-geração do procedimentos_map
+const PROC_SINONIMOS={
+  // Estética
+  'massagem':          ['massagem','massagem modeladora','relaxamento corporal','drenagem corporal'],
+  'drenagem':          ['drenagem','drenagem linfática','modeleve','modelagem','inchaço','retenção de líquidos'],
+  'limpeza de pele':   ['limpeza','limpeza de pele','limpeza facial','limpeza pele','limpeza básica'],
+  'harmonização facial':['harmonização','harmonizacao','botox','preenchimento','fio','bioestimulador'],
+  'avaliação':         ['avaliação','avaliacao','consulta','consulta inicial','avaliar'],
+  'peim':              ['peim','vasinhos','varicosas','varizes','escleroterapia'],
+  'procedimento estético corporal':['procedimento corporal','estético corporal','corporal','estetico'],
+  // Odontologia
+  'siso':              ['siso','terceiro molar'],
+  'canal':             ['canal','endodontia','tratamento de canal'],
+  'limpeza':           ['limpeza dental','profilaxia','limpeza dos dentes','tártaro'],
+  'implante':          ['implante','implante dentário','pino'],
+  'extração':          ['extração','extracao','tirar dente'],
+  'clareamento':       ['clareamento','branqueamento'],
+  'ortodontia':        ['ortodontia','aparelho'],
+  'radiografia':       ['radiografia','raio-x','rx'],
 };
+function slugify(s){
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+}
+function autoGenerateProcMap(profissionais){
+  const map={};
+  for(const prof of Object.values(profissionais||{})){
+    for(const esp of (prof.especialidades||[])){
+      const key=slugify(esp);
+      if(!map[key]){
+        // Busca sinônimos predefinidos (match parcial)
+        const espLow=esp.toLowerCase();
+        let sinonimos=null;
+        for(const[k,v]of Object.entries(PROC_SINONIMOS)){
+          if(espLow.includes(k)||k.includes(espLow)){sinonimos=v;break;}
+        }
+        map[key]=sinonimos||[espLow];
+      }
+    }
+  }
+  return map;
+}
+function isDentalMap(map){
+  const DENTAL_KEYS=['siso','canal','ortodontia','profilaxia','implante'];
+  return DENTAL_KEYS.some(k=>Object.keys(map||{}).includes(k));
+}
+function getEffectiveProcMap(c){
+  // Se mapa está vazio ou é o default odontológico, auto-gera das especialidades
+  const m=c.procedimentos_map||{};
+  if(!Object.keys(m).length||isDentalMap(m)){
+    return autoGenerateProcMap(c.profissionais);
+  }
+  return m;
+}
 const DEF_SLOTS={manha:['08:00','09:00','09:30','10:00','11:00'],tarde:['14:00','15:00','16:00','17:00'],noite:['18:00','19:00','20:00']};
 const DEF_HFUN=()=>Object.fromEntries(DIAS.map(d=>[d,{fechado:d==='domingo',abertura:'08:00',fechamento:'18:00'}]));
 const ESCHED=()=>Object.fromEntries(DIAS.map(d=>[d,{manha:false,tarde:false,noite:false}]));
@@ -287,6 +328,7 @@ function generateProcProfUnico(profissionais, procedimentosMap) {
 
 function applyConfig(t,c){
   const procProfUnico = generateProcProfUnico(c.profissionais, c.procedimentos_map);
+  const procMapFinal  = getEffectiveProcMap(c);
   const r={
     'TEMPLATE_CLINICA_NOME':je(c.clinica_nome||''),
     'TEMPLATE_AGENTE_NOME':je(c.agente_nome||''),
@@ -299,7 +341,7 @@ function applyConfig(t,c){
     'TEMPLATE_GOOGLE_CAL_CRED_ID':je(c.google_cal_cred_id||''),
     'TEMPLATE_AGENDAMENTO_WORKFLOW_ID':je(c.agendamento_workflow_id||'ATUALIZAR_APOS_IMPORT'),
     'TEMPLATE_PROFISSIONAIS_JS':je(JSON.stringify(c.profissionais||{})),
-    'TEMPLATE_PROCEDIMENTOS_MAP_JS':je(JSON.stringify(c.procedimentos_map||{})),
+    'TEMPLATE_PROCEDIMENTOS_MAP_JS':je(JSON.stringify(procMapFinal)),
     'TEMPLATE_HORARIO_FUNCIONAMENTO':je(JSON.stringify(c.horario_funcionamento||{})),
     'TEMPLATE_SLOTS_JS':je(JSON.stringify(c.slots||DEF_SLOTS)),
     'TEMPLATE_PROC_PROF_UNICO_JS':je(JSON.stringify(procProfUnico)),
@@ -735,6 +777,29 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
           </div>
           {Object.keys(client.profissionais).length===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13,background:C.card2,borderRadius:12}}>Nenhum profissional. Clique em "+ Adicionar".</div>}
           {Object.entries(client.profissionais).map(([n,d])=><ProfEditor key={n} name={n} dados={d} onUpdate={(nn,nd)=>updP(n,nn,nd)} onRemove={()=>remP(n)}/>)}
+          <div style={{marginTop:22}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <ST style={{margin:0}}>Mapa de Palavras-Chave</ST>
+              <Btn variant="ghost" sm onClick={()=>{
+                const gen=autoGenerateProcMap(client.profissionais);
+                upd('procedimentos_map',gen);
+              }}>♻️ Sincronizar das especialidades</Btn>
+            </div>
+            <p style={{fontSize:12,color:C.muted,marginBottom:12}}>O agente usa essas palavras para identificar qual procedimento o cliente quer. Separe sinônimos por vírgula.</p>
+            {Object.entries(getEffectiveProcMap(client)).map(([key,kws])=>(
+              <div key={key} style={{display:'grid',gridTemplateColumns:'140px 1fr',gap:8,marginBottom:8,alignItems:'center'}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.accentL,fontFamily:'JetBrains Mono,monospace'}}>{key}</span>
+                <input value={(kws||[]).join(', ')} onChange={e=>{
+                  const cur=getEffectiveProcMap(client);
+                  cur[key]=e.target.value.split(',').map(x=>x.trim()).filter(Boolean);
+                  upd('procedimentos_map',{...cur});
+                }} style={inpBase(C,true,true)}/>
+              </div>
+            ))}
+            {!Object.keys(client.profissionais||{}).length&&(
+              <p style={{fontSize:12,color:C.muted,fontStyle:'italic'}}>Adicione profissionais e especialidades para gerar o mapa automaticamente.</p>
+            )}
+          </div>
         </div>
       )}
       {tab==='hora'&&(
