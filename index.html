@@ -197,7 +197,10 @@ const EMPTY_CLIENT=(set_id='')=>({
   telefone_suporte:'',evo_instance:'',pinecone_index:'',calendar_email:'',
   supabase_cred_id:'',google_cal_cred_id:'',agendamento_workflow_id:'',
   profissionais:{},procedimentos_map:DEF_PROC,slots:DEF_SLOTS,
-  horario_funcionamento:DEF_HFUN(),customConfig:{},gsheets_id:'',google_review_link:''
+  horario_funcionamento:DEF_HFUN(),customConfig:{},gsheets_id:'',google_review_link:'',
+  tom_agente:'simpático, natural e acolhedor',
+  msg_saudacao_novo:'Olá! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Antes de começar, pode me dizer seu nome?',
+  msg_saudacao_retorno:'Olá, {nome}! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Como posso te ajudar hoje?',
 });
 
 // ── Template logic ───────────────────────────────────────────────────────────
@@ -212,6 +215,40 @@ function replBlock(code,name,val){
   while(e<code.length){if(code[e]==='{')d++;else if(code[e]==='}'&&--d===0)break;e++;}
   let end=e+1;while(end<code.length&&code[end]===';')end++;
   return code.slice(0,si)+'const '+name+' = '+val+';'+code.slice(end);
+}
+// ── Períodos disponíveis (derivado da agenda dos profissionais) ────────────
+function computePeriodosDisplay(profissionais){
+  // Retorna ex: "manhã/tarde" ou "manhã/tarde/noite"
+  const s=new Set();
+  for(const prof of Object.values(profissionais||{})){
+    const h=prof.horarios||{};
+    for(const day of Object.values(h)){
+      if(day.manha)s.add('manhã');
+      if(day.tarde)s.add('tarde');
+      if(day.noite)s.add('noite');
+    }
+  }
+  const ORDER=['manhã','tarde','noite'];
+  const r=ORDER.filter(p=>s.has(p));
+  return r.length?r.join('/'):'manhã/tarde';
+}
+function computePeriodosEnum(profissionais){
+  // Retorna ex: "manha ou tarde" ou "manha, tarde ou noite" (para o prompt JSON)
+  const s=new Set();
+  for(const prof of Object.values(profissionais||{})){
+    const h=prof.horarios||{};
+    for(const day of Object.values(h)){
+      if(day.manha)s.add('manha');
+      if(day.tarde)s.add('tarde');
+      if(day.noite)s.add('noite');
+    }
+  }
+  const ORDER=['manha','tarde','noite'];
+  const r=ORDER.filter(p=>s.has(p));
+  if(!r.length)return'manha ou tarde';
+  if(r.length===1)return r[0];
+  const last=r.pop();
+  return r.join(', ')+' ou '+last;
 }
 function generateProcProfUnico(profissionais, procedimentosMap) {
   // Gera mapeamento procedimento→profissional para fallback no Decide pos IA
@@ -243,10 +280,16 @@ function applyConfig(t,c){
     'TEMPLATE_PROFISSIONAIS_JS':je(JSON.stringify(c.profissionais||{})),
     'TEMPLATE_PROCEDIMENTOS_MAP_JS':je(JSON.stringify(c.procedimentos_map||{})),
     'TEMPLATE_HORARIO_FUNCIONAMENTO':je(JSON.stringify(c.horario_funcionamento||{})),
+    'TEMPLATE_SLOTS_JS':je(JSON.stringify(c.slots||DEF_SLOTS)),
     'TEMPLATE_PROC_PROF_UNICO_JS':je(JSON.stringify(procProfUnico)),
     'TEMPLATE_GSHEETS_ID':je(c.gsheets_id||''),
     'TEMPLATE_GOOGLE_REVIEW_LINK':je(c.google_review_link||''),
     'TEMPLATE_AGENDAMENTO_WORKFLOW_ID':je(c.agendamento_workflow_id||'ATUALIZAR_APOS_IMPORT'),
+    'TEMPLATE_TOM_AGENTE':je(c.tom_agente||'simpático, natural e acolhedor'),
+    'TEMPLATE_PERIODOS_DISPONIVEIS':je(computePeriodosDisplay(c.profissionais)),
+    'TEMPLATE_PERIODOS_ENUM':je(computePeriodosEnum(c.profissionais)),
+    'TEMPLATE_MSG_SAUDACAO_NOVO':je(c.msg_saudacao_novo||'Olá! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Antes de começar, pode me dizer seu nome?'),
+    'TEMPLATE_MSG_SAUDACAO_RETORNO':je(c.msg_saudacao_retorno||'Olá, {nome}! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Como posso te ajudar hoje?'),
   };
   if(c.customConfig)for(const[k,v]of Object.entries(c.customConfig))r['TEMPLATE_'+k]=je(v);
   let res=t;for(const[k,v]of Object.entries(r))res=res.split(k).join(v);
@@ -298,6 +341,17 @@ function Inp({label,value,onChange,placeholder,hint,mono,sm}){
     <div style={{marginBottom:sm?8:14}}>
       {label&&<label style={{display:'block',fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5}}>{label}</label>}
       <input value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={inpBase(C,mono,sm)}/>
+      {hint&&<p style={{fontSize:11,color:C.muted,marginTop:5,lineHeight:1.5}}>{hint}</p>}
+    </div>
+  );
+}
+function Textarea({label,value,onChange,placeholder,hint,rows}){
+  const{C}=useC();
+  return(
+    <div style={{marginBottom:14}}>
+      {label&&<label style={{display:'block',fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5}}>{label}</label>}
+      <textarea value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows||3}
+        style={{...inpBase(C,false,false),resize:'vertical',lineHeight:1.6}}/>
       {hint&&<p style={{fontSize:11,color:C.muted,marginTop:5,lineHeight:1.5}}>{hint}</p>}
     </div>
   );
@@ -587,7 +641,7 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
   const remP=n=>{const u={...client.profissionais};delete u[n];onChange({...client,profissionais:u});};
   const hfun=client.horario_funcionamento||DEF_HFUN();
   const updH=(dia,f,val)=>{const nh=JSON.parse(JSON.stringify(hfun));if(!nh[dia])nh[dia]={fechado:false,abertura:'08:00',fechamento:'18:00'};nh[dia][f]=val;upd('horario_funcionamento',nh);};
-  const TABS=[['basico','📋 Básico'],['infra','⚙️ Infra'],['creds','🔑 Creds'],['profs','👨‍⚕️ Profissionais'],['hora','🕐 Horários']];
+  const TABS=[['basico','📋 Básico'],['infra','⚙️ Infra'],['creds','🔑 Creds'],['profs','👨‍⚕️ Profissionais'],['hora','🕐 Horários'],['msgs','💬 Mensagens']];
   if(customFields.length>0)TABS.push(['custom','✨ Custom']);
   return(
     <div>
@@ -666,6 +720,36 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
               </div>
             );
           })}
+        </div>
+      )}
+      {tab==='msgs'&&(
+        <div className="fade">
+          <ST>Tom do Agente</ST>
+          <Inp label="Tom / Personalidade" value={client.tom_agente||''} onChange={v=>upd('tom_agente',v)}
+            placeholder="simpático, natural e acolhedor"
+            hint="Usado nos prompts do Agente Principal e do Mini RAG. Ex: formal e profissional | descontraído e próximo | empático e atencioso"/>
+          <div style={{background:'#0d2a1a',border:'1px solid #1a4a28',borderRadius:10,padding:'10px 13px',marginBottom:18,fontSize:12,color:'#6ee7b7',lineHeight:1.6}}>
+            <strong>Prévia do prompt:</strong><br/>
+            Tom <em>{client.tom_agente||'simpático, natural e acolhedor'}</em> — como uma atendente real.
+          </div>
+
+          <ST>Saudações (Novo Contato)</ST>
+          <Textarea label="Mensagem — Nome desconhecido" rows={3}
+            value={client.msg_saudacao_novo||''}
+            onChange={v=>upd('msg_saudacao_novo',v)}
+            placeholder="Olá! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Antes de começar, pode me dizer seu nome?"
+            hint="Placeholders disponíveis: {agente} → nome da IA | {clinica} → nome da empresa"/>
+          <Textarea label="Mensagem — Contato retornando (nome já conhecido)" rows={3}
+            value={client.msg_saudacao_retorno||''}
+            onChange={v=>upd('msg_saudacao_retorno',v)}
+            placeholder="Olá, {nome}! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Como posso te ajudar hoje?"
+            hint="Placeholders disponíveis: {nome} → primeiro nome do paciente | {agente} | {clinica}"/>
+
+          <div style={{background:'#0d1a2a',border:'1px solid #1a3a5a',borderRadius:10,padding:'10px 13px',fontSize:12,color:'#7dd3fc',lineHeight:1.7}}>
+            <strong>ℹ️ Como usar os placeholders:</strong><br/>
+            Escreva <code style={{background:'#1a3050',padding:'1px 5px',borderRadius:4}}>{'{agente}'}</code>, <code style={{background:'#1a3050',padding:'1px 5px',borderRadius:4}}>{'{clinica}'}</code> e <code style={{background:'#1a3050',padding:'1px 5px',borderRadius:4}}>{'{nome}'}</code> onde quiser que o sistema insira os dados reais.<br/>
+            Ex: <em>"Oi! Sou a {'{agente}'} 👋 Como posso ajudar a {'{clinica}'} hoje?"</em>
+          </div>
         </div>
       )}
       {tab==='custom'&&customFields.length>0&&(
