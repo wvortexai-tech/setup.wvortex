@@ -245,7 +245,7 @@ const EMPTY_CLIENT=(set_id='')=>({
   formas_pagamento:['PIX','Cartão de crédito','Cartão de débito','Dinheiro'],
   cobrar_sinal:false,
   valor_sinal:30,
-  mp_access_token:'',
+  infinitepay_handle:'',
   pagamento_mp_workflow_id:'',
 });
 
@@ -362,7 +362,7 @@ function applyConfig(t,c){
     'TEMPLATE_PAGAMENTO_INSTRUCAO':je(computePagamentoInstrucao(c.formas_pagamento)),
     'TEMPLATE_COBRAR_SINAL':je(c.cobrar_sinal?'true':'false'),
     'TEMPLATE_VALOR_SINAL':je(String(c.valor_sinal||'30')),
-    'TEMPLATE_MP_ACCESS_TOKEN':je(c.mp_access_token||''),
+    'TEMPLATE_INFINITEPAY_HANDLE':je(c.infinitepay_handle||''),
     'TEMPLATE_PAGAMENTO_MP_WORKFLOW_ID':je(c.pagamento_mp_workflow_id||'ATUALIZAR_APOS_IMPORT'),
     'TEMPLATE_AVISO_SINAL_REEMBOLSO':je(c.cobrar_sinal?(
       'ℹ️ *Sobre o sinal:* como o cancelamento foi feito com antecedência, o valor de R$ '+(c.valor_sinal||'30')+' pode ser devolvido. Para solicitar, entre em contato: '+(c.telefone_suporte||'suporte')+'.'
@@ -699,28 +699,7 @@ function NichoForm({nicho,onChange,onSave,onCancel}){
           ))}
         </div>
       )}
-      {tab==='pagamento'&&(
-        <div className="fade">
-          <ST>Sinal de Pagamento — Mercado Pago PIX</ST>
-          <div style={{background:'#0d2a1a',border:'1px solid #1a4a28',borderRadius:8,padding:'12px 16px',marginBottom:18}}>
-            <p style={{color:'#6ee7b7',fontSize:13,margin:0}}>
-              💡 Quando ativo, o agente cobra um sinal via PIX <strong>antes</strong> de criar o evento no calendário. O pagamento é detectado automaticamente via webhook do Mercado Pago.
-            </p>
-          </div>
 
-          <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 0',borderBottom:'1px solid #222',marginBottom:18}}>
-            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-              <input type="checkbox" checked={client.cobrar_sinal||false}
-                onChange={e=>upd('cobrar_sinal',e.target.checked)}
-                style={{width:20,height:20,cursor:'pointer',accentColor:'#C9B97A'}}/>
-              <span style={{fontSize:15,fontWeight:600,color:'#C9B97A'}}>Cobrar sinal antes de confirmar agendamento?</span>
-            </label>
-          </div>
-
-          {client.cobrar_sinal&&(
-            <div>
-              <Inp label="Valor do sinal (R$)" value={String(client.valor_sinal||30)}
-                onChange={v=>upd('valor_sinal',parseFloat(v)||30)}
                 placeholder="30" type="number"
                 hint="Valor cobrado como sinal. Será descontado no total na consulta."/>
               <Inp label="Access Token — Mercado Pago" value={client.mp_access_token||''}
@@ -955,6 +934,52 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
         <div className="fade">
           <ST>Campos Customizados — {nicho?.nome}</ST>
           {customFields.map(f=><Inp key={f.id} label={f.label||f.marker} value={(client.customConfig||{})[f.marker]||''} onChange={v=>upd('customConfig',{...(client.customConfig||{}),[f.marker]:v})} placeholder={f.placeholder||''}/>)}
+        </div>
+      )}
+      {tab==='pagamento'&&(
+        <div className="fade">
+          <ST>Sinal de Pagamento — InfinitePay</ST>
+          <Sel label="Cobrar sinal antes de confirmar agendamento?"
+            value={client.cobrar_sinal?'sim':'nao'}
+            onChange={v=>upd('cobrar_sinal',v==='sim')}
+            options={[{value:'nao',label:'Não cobrar sinal'},{value:'sim',label:'✅ Cobrar sinal (InfinitePay)'}]}/>
+          {client.cobrar_sinal&&(
+            <div>
+              <Inp label="Handle InfinitePay (seu @)" value={client.infinitepay_handle||''}
+                onChange={v=>upd('infinitepay_handle',v)}
+                placeholder="Ex: clinica_marina" mono
+                hint="Seu @ da conta InfinitePay. Encontrado em: app InfinitePay → Perfil → @tag."/>
+              <Inp label="Valor do sinal (R$)" value={String(client.valor_sinal||30)}
+                onChange={v=>upd('valor_sinal',v)}
+                placeholder="30"
+                hint="Valor cobrado como sinal. Será descontado no total no dia da consulta."/>
+              <Inp label='ID do Workflow "Pagamento MP"' value={client.pagamento_mp_workflow_id||''}
+                onChange={v=>upd('pagamento_mp_workflow_id',v)}
+                placeholder="Ex: 15" mono
+                hint="Importar PagamentoMP_v1_0_TEMPLATE.json no n8n e copiar o ID gerado."/>
+              <div style={{background:'#0d1f2d',border:'1px solid #1a3a50',borderRadius:8,padding:14,marginTop:12}}>
+                <p style={{color:'#7ec8e3',fontSize:12,fontWeight:600,marginBottom:8}}>📋 Avisos gerados nas mensagens:</p>
+                <p style={{color:'#aaa',fontSize:11,marginBottom:4}}>Cancelamento com antecedência:</p>
+                <p style={{color:'#ccc',fontSize:11,background:'#111',padding:'6px 8px',borderRadius:4,fontFamily:'monospace',margin:'0 0 8px'}}>
+                  {'ℹ️ *Sobre o sinal:* como o cancelamento foi feito com antecedência, o valor de R$ '+(client.valor_sinal||30)+' pode ser devolvido. Entre em contato: '+(client.telefone_suporte||'suporte')+'.'}
+                </p>
+                <p style={{color:'#aaa',fontSize:11,marginBottom:4}}>Cancelamento com menos de 24h:</p>
+                <p style={{color:'#ccc',fontSize:11,background:'#111',padding:'6px 8px',borderRadius:4,fontFamily:'monospace',margin:'0 0 8px'}}>
+                  {'⚠️ *Atenção:* cancelamentos e reagendamentos com menos de 24h não têm direito à devolução do sinal de R$ '+(client.valor_sinal||30)+'.'}
+                </p>
+                <p style={{color:'#aaa',fontSize:11,marginBottom:4}}>Adicionado ao lembrete de 24h:</p>
+                <p style={{color:'#ccc',fontSize:11,background:'#111',padding:'6px 8px',borderRadius:4,fontFamily:'monospace',margin:0}}>
+                  {'⏰ *Importante:* se precisar cancelar ou reagendar, faça agora por aqui. Cancelamentos com menos de 24h não têm direito à devolução do sinal de R$ '+(client.valor_sinal||30)+'.'}
+                </p>
+              </div>
+              <div style={{background:'#1c2a1c',border:'1px solid #2a4a2a',borderRadius:8,padding:14,marginTop:10}}>
+                <p style={{color:'#6baf6b',fontSize:12,fontWeight:600,marginBottom:8}}>⚙️ Configurar no painel InfinitePay:</p>
+                <p style={{color:'#aaa',fontSize:11,lineHeight:1.8,margin:0}}>
+                  {'Conta InfinitePay → Checkout Integrado → Webhooks → URL: https://n8n.wvortex.com/webhook/pagamento-mp'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20,paddingTop:14,borderTop:'1px solid '+C.border}}>
