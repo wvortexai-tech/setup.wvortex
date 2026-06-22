@@ -201,6 +201,7 @@ const EMPTY_CLIENT=(set_id='')=>({
   tom_agente:'simpático, natural e acolhedor',
   msg_saudacao_novo:'Olá! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Antes de começar, pode me dizer seu nome?',
   msg_saudacao_retorno:'Olá, {nome}! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Como posso te ajudar hoje?',
+  formas_pagamento:['PIX','Cartão de crédito','Cartão de débito','Dinheiro'],
 });
 
 // ── Template logic ───────────────────────────────────────────────────────────
@@ -215,6 +216,26 @@ function replBlock(code,name,val){
   while(e<code.length){if(code[e]==='{')d++;else if(code[e]==='}'&&--d===0)break;e++;}
   let end=e+1;while(end<code.length&&code[end]===';')end++;
   return code.slice(0,si)+'const '+name+' = '+val+';'+code.slice(end);
+}
+// ── Pagamento — derivado das formas_pagamento do cliente ─────────────
+const OPCOES_PAGAMENTO = ['PIX','Cartão de crédito','Cartão de débito','Dinheiro','Transferência','Convênio'];
+function computeFormasDisplay(fp){
+  return(fp||[]).join(', ');
+}
+function computePagamentoEnum(fp){
+  const conv=(fp||[]).some(f=>f.toLowerCase().includes('conv'));
+  return conv?'convenio ou particular':'particular';
+}
+function computePagamentoInstrucao(fp){
+  if(!fp||!fp.length)return'PAGAMENTO aceito conforme política da clínica.';
+  const conv=fp.some(f=>f.toLowerCase().includes('conv'));
+  const semConv=fp.filter(f=>!f.toLowerCase().includes('conv'));
+  const lista=semConv.join(', ');
+  if(conv){
+    return`PAGAMENTO: ${lista} = particular. Convênio = exclusivamente plano de saúde. NUNCA diga que "não aceitamos pix" — pix É particular.`;
+  }else{
+    return`PAGAMENTO aceito: ${lista}. NUNCA mencione convênio ou plano de saúde. Apenas as formas listadas são aceitas.`;
+  }
 }
 // ── Períodos disponíveis (derivado da agenda dos profissionais) ────────────
 function computePeriodosDisplay(profissionais){
@@ -290,6 +311,9 @@ function applyConfig(t,c){
     'TEMPLATE_PERIODOS_ENUM':je(computePeriodosEnum(c.profissionais)),
     'TEMPLATE_MSG_SAUDACAO_NOVO':je(c.msg_saudacao_novo||'Olá! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Antes de começar, pode me dizer seu nome?'),
     'TEMPLATE_MSG_SAUDACAO_RETORNO':je(c.msg_saudacao_retorno||'Olá, {nome}! 🌟 Me chamo {agente}, sou a atendente virtual da {clinica}. Como posso te ajudar hoje?'),
+    'TEMPLATE_FORMAS_PAGAMENTO_DISPLAY':je(computeFormasDisplay(c.formas_pagamento)),
+    'TEMPLATE_PAGAMENTO_ENUM':je(computePagamentoEnum(c.formas_pagamento)),
+    'TEMPLATE_PAGAMENTO_INSTRUCAO':je(computePagamentoInstrucao(c.formas_pagamento)),
   };
   if(c.customConfig)for(const[k,v]of Object.entries(c.customConfig))r['TEMPLATE_'+k]=je(v);
   let res=t;for(const[k,v]of Object.entries(r))res=res.split(k).join(v);
@@ -654,6 +678,32 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
           <Inp label="Nome do Agente IA" value={client.agente_nome} onChange={v=>upd('agente_nome',v)} placeholder="Ana"/>
           <Sel label="Pronome" value={client.agente_pronome} onChange={v=>upd('agente_pronome',v)} options={[{value:'obrigada',label:'Feminino — obrigada'},{value:'obrigado',label:'Masculino — obrigado'}]}/>
           <Inp label="Telefone Suporte" value={client.telefone_suporte} onChange={v=>upd('telefone_suporte',v)} placeholder="5521999999999" mono hint="Com DDI. Exibido em problemas técnicos."/>
+          <ST>Formas de Pagamento</ST>
+          <p style={{fontSize:12,color:C.muted,marginBottom:10}}>Marque as formas aceitas. Se incluir Convênio, o agente passará a oferecer essa opção.</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+            {OPCOES_PAGAMENTO.map(op=>{
+              const sel=(client.formas_pagamento||[]).includes(op);
+              return(
+                <div key={op} onClick={()=>{
+                  const cur=client.formas_pagamento||[];
+                  upd('formas_pagamento', sel ? cur.filter(x=>x!==op) : [...cur,op]);
+                }}
+                style={{
+                  padding:'7px 14px',borderRadius:20,cursor:'pointer',fontSize:12,fontWeight:600,
+                  background:sel?C.gold:'transparent',
+                  color:sel?C.navy:C.text,
+                  border:'1.5px solid '+(sel?C.gold:C.border2),
+                  transition:'all .15s'
+                }}>{op}</div>
+              );
+            })}
+          </div>
+          {(client.formas_pagamento||[]).length>0&&(
+            <div style={{background:'#0d1a0d',border:'1px solid #1a4a1a',borderRadius:10,padding:'9px 13px',fontSize:12,color:'#6ee7b7',marginBottom:14}}>
+              <strong>Instrução gerada no agente:</strong><br/>
+              <em>{computePagamentoInstrucao(client.formas_pagamento)}</em>
+            </div>
+          )}
         </div>
       )}
       {tab==='infra'&&(
