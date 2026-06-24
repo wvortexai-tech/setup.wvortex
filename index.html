@@ -926,12 +926,7 @@ function ClientForm({client,nichos,onChange,onSave,onCancel}){
                   {'⏰ *Importante:* se precisar cancelar ou reagendar, faça agora por aqui. Cancelamentos com menos de 24h não têm direito à devolução do sinal de R$ '+(client.valor_sinal||30)+'.'}
                 </p>
               </div>
-              <div style={{background:'#1c2a1c',border:'1px solid #2a4a2a',borderRadius:8,padding:14,marginTop:10}}>
-                <p style={{color:'#6baf6b',fontSize:12,fontWeight:600,marginBottom:8}}>⚙️ Configurar no painel InfinitePay:</p>
-                <p style={{color:'#aaa',fontSize:11,lineHeight:1.8,margin:0}}>
-                  {'Conta InfinitePay → Checkout Integrado → Webhooks → URL: https://n8n.wvortex.com/webhook/pagamento-mp'}
-                </p>
-              </div>
+
             </div>
           )}
         </div>
